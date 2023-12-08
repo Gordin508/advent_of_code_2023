@@ -66,11 +66,8 @@ def part1(lines):
 
 
 def gcdb(a, b):
-    while a != b:
-        if a > b:
-            a = a - b
-        else:
-            b = b - a
+    while b > 0:
+        a, b = b, a % b
     return a
 
 
