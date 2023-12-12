@@ -26,11 +26,12 @@ class Condition(Enum):
 
 
 class Springs:
-    def __init__(self, line: str):
+    def __init__(self, line: str, isFold=False):
         split = line.strip().split(" ", maxsplit=1)
         self.rawconditions = split[0]
         self.conditions = [Condition.from_char(x) for x in split[0]]
         self.record = [int(x.strip()) for x in split[1].split(",")]
+        self.isFold = isFold
 
     def __str__(self):
         return f"{self.rawconditions} {self.record}"
@@ -99,15 +100,26 @@ def part1(lines):
 
 
 def part2(lines):
-    # import ipdb; ipdb.set_trace()
-    pass
+    import ipdb; ipdb.set_trace()
+    result = 0
+
+    for line in lines:
+        spring = Springs(line)
+        possibilities = spring.numPossibilities()
+        spring2 = Springs("?" + line, isFold=True)
+        possibilities2 = spring2.numPossibilities()
+        tmp = possibilities * (possibilities2**4)
+        logger.info(f"{possibilities} {possibilities2}: {tmp}")
+        result += tmp
+
+    logger.info(f"Part 2: {result}")
 
 
 def main():
     infile = sys.argv[1] if len(sys.argv) > 1 else 'input.txt'
     with open(infile) as f:
         lines = f.readlines()
-    part1(lines)
+    # part1(lines)
     part2(lines)
 
 
