@@ -18,8 +18,12 @@ def main():
     infile = sys.argv[1] if len(sys.argv) > 1 else 'input.txt'
     with open(infile) as f:
         lines = f.readlines()
-    part1(lines)
-    part2(lines)
+    for i, fun in enumerate((part1, part2), start=1):
+        result = fun(lines)
+        if result is None:
+            logger.debug(f"Part {i} not yet implemented")
+            continue
+        logger.info(f"Part 1: {result}")
 
 
 if __name__ == '__main__':
