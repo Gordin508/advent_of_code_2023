@@ -12,63 +12,55 @@ def parsegrid(lines):
         return 0
     return np.array([[x == "#" for x in line] for line in lines], np.int8)
 
-def findHorizontalReflections(grid: np.ndarray):
-    horizontalreflections = []
+
+def findReflections(grid: np.ndarray, smudge):
     assert len(grid.shape) == 2, f"Unexpected shape: {grid.shape}"
 
-    def testreflect(startval):
-        for i in range(min(startval + 1, grid.shape[0] - startval - 1)):
-            if np.any(grid[startval - i] != grid[startval + i + 1]):
-                return False
-        return True
+    def testhreflect(startval, smudge):
+        height = min(startval + 1, grid.shape[0] - startval - 1)
+        differences = np.sum(grid[startval - height + 1: startval + 1][::-1]
+                             != grid[startval + 1: startval + 1 + height])
+        return differences == 0 if not smudge else differences == 1
 
-    for y in range(grid.shape[0] - 1):
-        if testreflect(y):
-            horizontalreflections.append(y + 1)
-    return horizontalreflections
+    def testvreflect(startval, smudge):
+        width = min(startval + 1, grid.shape[1] - startval - 1)
+        differences = np.sum(grid[:, startval - width + 1:startval + 1][:, ::-1]
+                             != grid[:, startval + 1:startval + 1 + width])
+        return differences == 0 if not smudge else differences == 1
 
-
-def findVerticalReflections(grid: np.ndarray):
-    assert len(grid.shape) == 2, f"Unexpected shape: {grid.shape}"
-    reflections = []
-
-    def testreflect(startval):
-        for i in range(min(startval + 1, grid.shape[1] - startval - 1)):
-            if np.any(grid[:, startval - i] != grid[:, startval + i + 1]):
-                return False
-        return True
-
-    for x in range(grid.shape[1] - 1):
-        if testreflect(x):
-            reflections.append(x + 1)
-    return reflections
+    horizontal = [y + 1 for y in range(grid.shape[0] - 1) if testhreflect(y, smudge)]
+    vertical = [x + 1 for x in range(grid.shape[1] - 1) if testvreflect(x, smudge)]
+    return (horizontal, vertical)
 
 
-def findPatternReflection(lines):
+def reflectionScore(lines, smudge=False):
     grid = parsegrid(lines)
-    horizontal = findHorizontalReflections(grid)
-    vertical = findVerticalReflections(grid)
-    xval = horizontal[0] if horizontal else 0
-    yval = vertical[0] if vertical else 0
-    return xval * 100 + yval
+    assert len(grid.shape) == 2
+    horizontal, vertical = findReflections(grid, smudge)
+    assert len(horizontal) + len(vertical) == 1
+    hval = horizontal[0] if horizontal else 0
+    vval = vertical[0] if vertical else 0
+    return hval * 100 + vval
 
 
-def part1(lines):
-    # we need to find empty lines
+def worlditer(lines):
     currentworld = []
-    result = 0
     for i, line in enumerate(lines):
         if len(line.strip()) > 0:
             currentworld.append(line)
         else:
-            result += findPatternReflection(currentworld)
+            yield currentworld
             currentworld = []
-    result += findPatternReflection(currentworld)
-    return result
+    if currentworld:
+        yield currentworld
+
+
+def part1(lines):
+    return sum((reflectionScore(world) for world in worlditer(lines)))
 
 
 def part2(lines):
-    pass
+    return sum((reflectionScore(world, smudge=True) for world in worlditer(lines)))
 
 
 def main():
@@ -80,7 +72,7 @@ def main():
         if result is None:
             logger.debug(f"Part {i} not yet implemented")
             continue
-        logger.info(f"Part 1: {result}")
+        logger.info(f"Part {i}: {result}")
 
 
 if __name__ == '__main__':
