@@ -1,6 +1,5 @@
 import logging
-import numpy as np
-from enum import Enum, Flag, auto
+from enum import Flag, auto
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -70,6 +69,7 @@ class Beamdirection(Flag):
 def calcenergy(directions, printout=False):
     height = len(directions)
     width = len(directions[0])
+    import numpy as np
     energized = np.zeros((height, width), dtype=np.int8)
     for y in range(height):
         for x in range(width):
@@ -83,7 +83,7 @@ def calcenergy(directions, printout=False):
                 else:
                     print('.', end='')
             print('')
-    return energized
+    return np.sum(energized)
 
 
 def printdirections(directions, grid):
@@ -95,14 +95,13 @@ def printdirections(directions, grid):
                 print(directions[y][x].tochar() if directions[y][x] is not None else grid[y][x], end='')
 
 
-def part1(lines):
-    height = len(lines)
-    width = len(lines[0].strip())
-    grid = lines
+def simulate(grid, starty, startx, startdir):
+    height = len(grid)
+    width = len(grid[0])
     directions = [[None for _ in range(width)] for _ in range(height)]
 
     queue = []
-    # first step is always top left tile
+    # test all possible left/right injections
 
     def enqueue(q, y, x, indirection: Beamdirection):
         if 0 > y or y >= height:
@@ -119,7 +118,7 @@ def part1(lines):
         directions[y][x] |= indirection
         q.append((y, x, indirection))
 
-    enqueue(queue, 0, 0, Beamdirection.RIGHT)
+    enqueue(queue, starty, startx, startdir)
 
     # import ipdb; ipdb.set_trace()
     while len(queue) > 0:
@@ -156,84 +155,30 @@ def part1(lines):
                     assert False, f"{grid[y][x]}"
         queue = newqueue
 
-    energized = calcenergy(directions)
-    return np.sum(energized)
+    return calcenergy(directions)
+
+
+def part1(lines):
+    grid = [line.strip() for line in lines]
+    return simulate(grid, 0, 0, Beamdirection.RIGHT)
 
 
 def part2(lines):
-    height = len(lines)
-    width = len(lines[0].strip())
-    grid = lines
-    directions = [[None for _ in range(width)] for _ in range(height)]
+    grid = [line.strip() for line in lines]
+    height = len(grid)
+    width = len(grid[0])
 
-    queue = []
-    # first step is always top left tile
+    def combinations():
+        for y in range(height):
+            yield (y, 0, Beamdirection.RIGHT)
+            yield (y, width - 1, Beamdirection.LEFT)
+        for x in range(width):
+            yield (0, x, Beamdirection.DOWN)
+            yield (height - 1, x, Beamdirection.UP)
 
-    def enqueue(q, y, x, indirection: Beamdirection):
-        if 0 > y or y >= height:
-            return
-        if 0 > x or x >= width:
-            return
-
-        currentdir = directions[y][x]
-        if currentdir is None:
-            directions[y][x] = indirection
-        elif indirection in currentdir:
-            # already in queue or treated
-            return
-        directions[y][x] |= indirection
-        q.append((y, x, indirection))
-
-    combinations = [(y, 0, Beamdirection.RIGHT) for y in range(height)]
-    combinations += [(y, width - 1, Beamdirection.LEFT) for y in range(height)]
-    combinations += [(0, x, Beamdirection.DOWN) for x in range(width)]
-    combinations += [(height - 1, x, Beamdirection.UP) for x in range(width)]
     record = 0
-    for starty, startx, startdir in combinations:
-        directions = [[None for _ in range(width)] for _ in range(height)]
-
-        queue = []
-        # test all possible left/right injections
-
-        enqueue(queue, starty, startx, startdir)
-
-        # import ipdb; ipdb.set_trace()
-        while len(queue) > 0:
-            newqueue = []
-            for y, x, direction in queue:
-                match (grid[y][x]):
-                    case '.':
-                        # go further in direction
-                        yn, xn = direction.walk(y, x)
-                        enqueue(newqueue, yn, xn, direction)
-                    case '-':
-                        if direction == Beamdirection.LEFT or direction == Beamdirection.RIGHT:
-                            yn, xn = direction.walk(y, x)
-                            enqueue(newqueue, yn, xn, direction)
-                        else:
-                            split = direction.split()
-                            for splitdir in split:
-                                yn, xn = splitdir.walk(y, x)
-                                enqueue(newqueue, yn, xn, splitdir)
-                    case '|':
-                        if direction == Beamdirection.UP or direction == Beamdirection.DOWN:
-                            yn, xn = direction.walk(y, x)
-                            enqueue(newqueue, yn, xn, direction)
-                        else:
-                            split = direction.split()
-                            for splitdir in split:
-                                yn, xn = splitdir.walk(y, x)
-                                enqueue(newqueue, yn, xn, splitdir)
-                    case '\\' | '/':
-                        newdir = direction.reflect(grid[y][x])
-                        yn, xn = newdir.walk(y, x)
-                        enqueue(newqueue, yn, xn, newdir)
-                    case _:
-                        assert False, f"{grid[y][x]}"
-            queue = newqueue
-
-        energized = calcenergy(directions)
-        energy = np.sum(energized)
+    for starty, startx, startdir in combinations():
+        energy = simulate(grid, starty, startx, startdir)
         if energy > record:
             record = energy
     return record
