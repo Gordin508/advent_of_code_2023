@@ -79,15 +79,7 @@ class State:
         return self.__str__()
 
 
-def part1(lines):
-    lines = [line.strip() for line in lines]
-    height = len(lines)
-    width = len(lines[0])
-    grid = np.zeros((height, width), dtype=np.int8)
-    DESTINATION = Position(height - 1, width - 1)
-    for y, line in enumerate(lines):
-        for x, number in enumerate(line):
-            grid[y, x] = int(number)
+def solve(grid, destination, minmove=0, maxmove=3):
     visited = set()
     queue = [State(0, Position(0, 0), Direction(1, 0), 0), State(0, Position(0, 0), Direction(0, 1), 0)]
     heapq.heapify(queue)
@@ -101,25 +93,44 @@ def part1(lines):
         if nextnode.key() in visited:
             continue
         visited.add(nextnode.key())
-        if nextnode.position == DESTINATION:
+        if nextnode.position == destination and nextnode.count >= minmove:
             return nextnode.cost
         if not positionLegal(nextnode.position):
             continue
         newpos = nextnode.position + nextnode.direction
-        if nextnode.count < 3 and positionLegal(newpos):
+        if nextnode.count < maxmove and positionLegal(newpos):
             heapq.heappush(queue, State(nextnode.cost + grid[newpos.y, newpos.x], newpos, nextnode.direction, nextnode.count + 1))
         left = nextnode.direction.rotLeft()
         right = nextnode.direction.rotRight()
-        for x in (left, right):
-            newpos = nextnode.position + x
-            if positionLegal(newpos):
-                heapq.heappush(queue, State(nextnode.cost + grid[newpos.y, newpos.x], newpos, x, 1))
+        if nextnode.count >= minmove:
+            for x in (left, right):
+                newpos = nextnode.position + x
+                if positionLegal(newpos):
+                    heapq.heappush(queue, State(nextnode.cost + grid[newpos.y, newpos.x], newpos, x, 1))
 
     assert False
 
 
+def part1(lines):
+    lines = [line.strip() for line in lines]
+    height = len(lines)
+    width = len(lines[0])
+    grid = np.zeros((height, width), dtype=np.int8)
+    for y, line in enumerate(lines):
+        for x, number in enumerate(line):
+            grid[y, x] = int(number)
+    return solve(grid, destination=Position(height - 1, width - 1))
+
+
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    lines = [line.strip() for line in lines]
+    height = len(lines)
+    width = len(lines[0])
+    grid = np.zeros((height, width), dtype=np.int8)
+    for y, line in enumerate(lines):
+        for x, number in enumerate(line):
+            grid[y, x] = int(number)
+    return solve(grid, destination=Position(height - 1, width - 1), minmove=4, maxmove=10)
 
 
 def main():
