@@ -9,12 +9,24 @@ LINEREGEX = re.compile(r"(?P<direction>[UDLR])\s+(?P<distance>\d+)\s+\(\#(?P<rgb
 
 
 class Command:
-    def __init__(self, direction: str, distance: int, rgb: str):
+    def __init__(self, direction: str, distance: int, rgb: str, part2=False):
         assert direction in 'UDLR'
         assert distance >= 1
         self.direction = direction
         self.distance = distance
         self.rgb = rgb
+
+        if part2:
+            self.distance = int(self.rgb[:5], 16)
+            match int(self.rgb[-1]):
+                case 0:
+                    self.direction = "R"
+                case 1:
+                    self.direction = "D"
+                case 2:
+                    self.direction = "L"
+                case 3:
+                    self.direction = "U"
 
     def __str__(self):
         return f"{self.direction} {self.distance} (#{self.rgb})"
@@ -63,88 +75,26 @@ class Position:
 
 class Grid:
     def __init__(self, commands: [Command]):
-        position = (0, 0)
-        minx, miny, maxx, maxy = 0, 0, 0, 0
         self.commands = commands
 
-        def updatemax(position):
-            nonlocal minx, miny, maxx, maxy
-            minx = min(position[1], minx)
-            miny = min(position[0], miny)
-            maxx = max(position[1], maxx)
-            maxy = max(position[0], maxy)
-
-        for command in commands:
-            newy, newx = position
-            match command.direction:
-                case "U":
-                    newy -= command.distance
-                case "D":
-                    newy += command.distance
-                case "L":
-                    newx -= command.distance
-                case "R":
-                    newx += command.distance
-                case _:
-                    assert False, f"{command}"
-            position = (newy, newx)
-            updatemax(position)
-
-        height = maxy - miny + 1
-        width = maxx - minx + 1
-        grid = np.zeros((height, width), dtype=np.int8)
-        self.grid = grid
-        position = (0 - miny, 0 - minx)
-        startpos = position
-        for command in commands:
-            oldx, oldy = position[1], position[0]
-            newx, newy = oldx, oldy
-            match command.direction:
-                case "U":
-                    newy -= command.distance
-                case "D":
-                    newy += command.distance
-                case "L":
-                    newx -= command.distance
-                case "R":
-                    newx += command.distance
-                case _:
-                    assert False, f"{command}"
-            position = (newy, newx)
-            if newx < oldx:
-                newx, oldx = oldx, newx
-            if newy < oldy:
-                newy, oldy = oldy, newy
-            for y in range(oldy, newy + 1):
-                for x in range(oldx, newx + 1):
-                    grid[y, x] = 1
-        assert position == startpos, f"{position} {startpos}"
-        self.grid = grid
-
     def calculateInside(self):
-        # shoelace
-        result = 0
-        bordersum = 0
-        position = Position(0, 0)
         # shoelace formula + pick's theorem
+        inner = 0  # inner area
+        borderpoints = 0  # note: original (0, 0) position is included in last edge
+        position = Position(0, 0)  # commands are relative, so we need this for bookkeeping
         for i in range(len(self.commands)):
             c1 = self.commands[i]
             c2 = self.commands[(i + 1) % len(self.commands)]
             p1 = position + c1
             p2 = p1 + c2
-            result += p1.x * p2.y - p1.y * p2.x
-            bordersum += (p1 - p2).abs()
+            inner += p1.x * p2.y - p1.y * p2.x
+            borderpoints += (p1 - p2).abs()  # length of edge from p1 to p2 (excluding starting point)
             position = p1
-        result = (abs(result) + bordersum) // 2 + 1
-        return result
-
-    def printgrid(self):
-        for line in self.grid:
-            print("".join(('.' if x == 0 else '#' for x in line)))
+        inner = (abs(inner) + borderpoints) // 2 + 1  # + 1 instead of -1 due to the nature of our grid
+        return inner
 
 
 def part1(lines):
-    import ipdb; ipdb.set_trace()
     commands = []
     for line in lines:
         # parse input
@@ -153,12 +103,19 @@ def part1(lines):
         commands.append(Command(direction, distance, rgb))
 
     grid = Grid(commands)
-    grid.printgrid()
     return grid.calculateInside()
 
 
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    commands = []
+    for line in lines:
+        # parse input
+        match = LINEREGEX.match(line.strip())
+        direction, distance, rgb = match['direction'], int(match['distance']), match['rgb']
+        commands.append(Command(direction, distance, rgb, part2=True))
+
+    grid = Grid(commands)
+    return grid.calculateInside()
 
 
 def main():
