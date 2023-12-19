@@ -62,7 +62,7 @@ class Instruction:
     def __str__(self):
         if not self.attr:
             return f"{self.action}"
-        return f"{self.attr}{self.op}{self.val}:{self.action}"
+        return f"{self.attr}{self.op}{self.value}:{self.action}"
 
     def __repr__(self):
         return self.__str__()
@@ -149,8 +149,110 @@ def part1(lines):
     return result
 
 
+class Constraint:
+    def __init__(self, attr, op, value):
+        self.attr = attr
+        self.op = op
+        self.value = value
+
+    @classmethod
+    def from_instr(cls, instruction: Instruction, invert=False):
+        if not instruction.attr:
+            return None
+        op = instruction.op
+        value = instruction.value
+        if invert:
+            op = "<" if instruction.op == ">" else ">"
+            value = value + 1 if instruction.op == ">" else value - 1
+        return Constraint(instruction.attr, op, value)
+
+    def __str__(self):
+        return f"{self.attr}{self.op}{self.value}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class Constraints:
+    def __init__(self):
+        self.constraints = []
+
+    def addConstraint(self, instruction: Instruction, invert=False):
+        newc = Constraint.from_instr(instruction, invert)
+        if newc:
+            self.constraints.append(newc)
+
+    def copy(self):
+        newc = Constraints()
+        newc.constraints = self.constraints.copy()
+        return newc
+
+    def solve(self) -> int:
+        possibilities = 1
+        for attr in ('xmas'):
+            const = (c for c in self.constraints if c.attr == attr)
+            interval = [1, 4000]
+            for c in const:
+                if c.op == "<":
+                    interval[1] = min(interval[1], c.value - 1)
+                elif c.op == ">":
+                    interval[0] = max(interval[0], c.value + 1)
+                if interval[1] < interval[0]:
+                    return 0
+            possibilities *= max(0, interval[1] - interval[0] + 1)
+        return possibilities
+
+    def solvable(self) -> bool:
+        return self.solve() > 0
+
+    def __str__(self):
+        return f"{len(self.constraints)} constraints: {self.constraints}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    workflows, _ = parseInput(lines)
+
+    # BFS
+    class QueueEntry:
+        def __init__(self, action, constraints):
+            self.action = action
+            self.constraints = constraints
+
+        def __str__(self):
+            return f"{self.action} ({self.constraints})"
+
+        def __repr__(self):
+            return self.__str__()
+
+    queue = [QueueEntry('in', Constraints())]
+    possibilities = 0
+
+    while queue:
+        newq = []
+        for entry in queue:
+            if not entry.constraints.solvable():
+                continue
+            if entry.action == "R":
+                continue
+            if entry.action == "A":
+                possibilities += entry.constraints.solve()
+                continue
+            workflow = workflows[entry.action]
+            runningconstraints = entry.constraints.copy()
+            for instr in workflow.instructions:
+                if instr.attr:
+                    newc = runningconstraints.copy()
+                    newc.addConstraint(instr)
+                    newq.append(QueueEntry(instr.action, newc))
+                    runningconstraints.addConstraint(instr, invert=True)
+                else:
+                    newq.append(QueueEntry(instr.action, runningconstraints))
+        queue = newq
+
+    return possibilities
 
 
 def main():
