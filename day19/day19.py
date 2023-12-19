@@ -176,29 +176,31 @@ class Constraint:
 class Constraints:
     def __init__(self):
         self.constraints = []
+        self.intervals = {attr: (1, 4000) for attr in "xmas"}
 
     def addConstraint(self, instruction: Instruction, invert=False):
         newc = Constraint.from_instr(instruction, invert)
         if newc:
             self.constraints.append(newc)
+            self._updateInterval(newc)
 
     def copy(self):
         newc = Constraints()
         newc.constraints = self.constraints.copy()
+        newc.intervals = self.intervals.copy()
         return newc
+
+    def _updateInterval(self, constraint: Constraint):
+        lower, upper = self.intervals[constraint.attr]
+        if constraint.op == "<":
+            upper = min(upper, constraint.value - 1)
+        elif constraint.op == ">":
+            lower = max(lower, constraint.value + 1)
+        self.intervals[constraint.attr] = (lower, upper)
 
     def solve(self) -> int:
         possibilities = 1
-        for attr in ('xmas'):
-            const = (c for c in self.constraints if c.attr == attr)
-            interval = [1, 4000]
-            for c in const:
-                if c.op == "<":
-                    interval[1] = min(interval[1], c.value - 1)
-                elif c.op == ">":
-                    interval[0] = max(interval[0], c.value + 1)
-                if interval[1] < interval[0]:
-                    return 0
+        for interval in self.intervals.values():
             possibilities *= max(0, interval[1] - interval[0] + 1)
         return possibilities
 
