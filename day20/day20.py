@@ -1,5 +1,6 @@
 import logging
 from enum import Enum, auto
+import math
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -178,6 +179,10 @@ def part2(lines):
     highsignals = 0
     numpresses = 0
     assert 'rx' in modules
+    rx_conj = next((m for m in modules.values() if any((target.name == 'rx') for target in m.targetmodules)))
+    assert rx_conj is not None
+    inputmodules = [m for m in modules.values() if any((target == rx_conj) for target in m.targetmodules)]
+    cycles = {module.name: None for module in inputmodules}
 
     def pushbutton():
         nonlocal lowsignals, highsignals
@@ -190,6 +195,10 @@ def part2(lines):
                     if entry.target.name == 'rx':
                         return numpresses
                 elif entry.signal == Signal.HIGH:
+                    if entry.source in inputmodules and cycles[entry.source.name] is None:
+                        cycles[entry.source.name] = numpresses
+                        if all((value is not None for value in cycles.values())):
+                            return math.lcm(*cycles.values())
                     highsignals += 1
                 newpulses = entry.target.handlesignal(entry.signal, entry.source)
                 if newpulses:
@@ -198,7 +207,9 @@ def part2(lines):
             queue = newq
     while True:
         numpresses += 1
-        pushbutton()
+        count = pushbutton()
+        if count is not None:
+            return count
 
     assert False
 
