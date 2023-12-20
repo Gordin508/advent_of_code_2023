@@ -179,8 +179,10 @@ def part2(lines):
     highsignals = 0
     numpresses = 0
     assert 'rx' in modules
+    # we assume the penultimate node is a conjunction node everytime
     rx_conj = next((m for m in modules.values() if any((target.name == 'rx') for target in m.targetmodules)))
     assert rx_conj is not None
+    # rx receives low if all conjunction inputs are HIGH
     inputmodules = [m for m in modules.values() if any((target == rx_conj) for target in m.targetmodules)]
     cycles = {module.name: None for module in inputmodules}
 
@@ -195,6 +197,8 @@ def part2(lines):
                     if entry.target.name == 'rx':
                         return numpresses
                 elif entry.signal == Signal.HIGH:
+                    # we just assume that the sub-circuits are cyclic and the only time
+                    # they output HIGH is at the end of their cycle
                     if entry.source in inputmodules and cycles[entry.source.name] is None:
                         cycles[entry.source.name] = numpresses
                         if all((value is not None for value in cycles.values())):
