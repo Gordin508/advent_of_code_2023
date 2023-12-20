@@ -23,29 +23,20 @@ class Signal(Enum):
         return f"{self.__class__.__name__}.{self.name}"
 
 
+class SignalWrapper:
+    def __init__(self, signal: Signal, target, source):
+        self.signal = signal
+        self.target = target
+        self.source = source
+
+
 class Module:
     def __init__(self, name):
-        self.queuedsignal = None
-        self.activesignal = None
-        self.targetmodules = []
         self.name = name
+        self.targetmodules = []
 
-    def sendsignal(self, signal: Signal, source):
-        assert signal is not None
-        logger.debug(f"{source.name} -{signal}-> {self.name}")
-        self.queuedsignal = signal
-
-    def handlesignal(self):
+    def handlesignal(self, signal, source):
         raise NotImplementedError()
-
-    def numactivesignals(self):
-        match self.activesignal:
-            case Signal.LOW:
-                return (1, 0)
-            case Signal.HIGH:
-                return (0, 1)
-            case _:
-                return (0, 0)
 
     def addtargetmodule(self, module):
         self.targetmodules.append(module)
@@ -55,33 +46,33 @@ class Module:
         # only relevant for conjunction modules
         pass
 
-    def finishcycle(self):
-        self.activesignal = self.queuedsignal
-        self.queuedsignal = None
-
     def __str__(self):
         targetmods = ", ".join((m.name for m in self.targetmodules))
-        return f"{self.name} -> {targetmods} (active: {self.activesignal}, queued: {self.queuedsignal})"
+        return f"{self.name} -> {targetmods}"
 
     def __repr__(self):
         return self.__str__()
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __hash__(self):
+        return hash(self.name)
 
 
 class DummyModule(Module):
     def __init__(self, name):
         super().__init__(name)
 
-    def handlesignal(self):
+    def handlesignal(self, signal, source):
         # just consume it
-        pass
+        return None
 
 
 class BroadCaster(Module):
 
-    def handlesignal(self):
-        if self.activesignal is not None:
-            for target in self.targetmodules:
-                target.sendsignal(self.activesignal, self)
+    def handlesignal(self, signal, source):
+        return [SignalWrapper(signal, target, self) for target in self.targetmodules]
 
 
 class FlipFlop(Module):
@@ -89,11 +80,11 @@ class FlipFlop(Module):
         super().__init__(name)
         self.on = False
 
-    def handlesignal(self):
-        if self.activesignal == Signal.LOW:
+    def handlesignal(self, signal, source):
+        if signal == Signal.LOW:
             self.on = not self.on
-            for module in self.targetmodules:
-                module.sendsignal(Signal.HIGH if self.on else Signal.LOW, self)
+            newsignal = Signal.HIGH if self.on else Signal.LOW
+            return [SignalWrapper(newsignal, target, self) for target in self.targetmodules]
 
 
 class Conjunction(Module):
@@ -113,29 +104,10 @@ class Conjunction(Module):
         self.queuedsignal.append(signal)
         self.queuedsignalsource.append(source)
 
-    def numactivesignals(self):
-        lowsignals, highsignals = (0, 0)
-        for signal in self.activesignal:
-            if signal == Signal.LOW:
-                lowsignals += 1
-            elif signal == Signal.HIGH:
-                highsignals += 1
-        return (lowsignals, highsignals)
-
-    def handlesignal(self):
-        for signal, source in zip(self.activesignal, self.activesignalsource):
-            self.memory[source] = signal
-        if not self.activesignal:
-            return
+    def handlesignal(self, signal, source):
+        self.memory[source] = signal
         newsignal = Signal.LOW if all((signal == Signal.HIGH for signal in self.memory.values())) else Signal.HIGH
-        for module in self.targetmodules:
-            module.sendsignal(newsignal, self)
-
-    def finishcycle(self):
-        self.activesignal = self.queuedsignal
-        self.activesignalsource = self.queuedsignalsource
-        self.queuedsignalsource = []
-        self.queuedsignal = []
+        return [SignalWrapper(newsignal, target, self) for target in self.targetmodules]
 
 
 def parsemodules(lines) -> dict[str, Module]:
@@ -171,7 +143,6 @@ def parsemodules(lines) -> dict[str, Module]:
 
 
 def part1(lines):
-    import ipdb; ipdb.set_trace()
     modules = parsemodules(lines)
     button = DummyModule('button')
     logger.info(f"Parsed {len(modules)} modules")
@@ -180,21 +151,19 @@ def part1(lines):
 
     def pushbutton():
         nonlocal lowsignals, highsignals
-        modules['broadcaster'].sendsignal(Signal.LOW, button)
-        modules['broadcaster'].finishcycle()
-        activesignals = True
-        while activesignals:
-            activesignals = False
-            for module in modules.values():
-                low, high = module.numactivesignals()
-                lowsignals += low
-                highsignals += high
-                if (low | high) > 0:
-                    activesignals = True
-                module.handlesignal()
-            for module in modules.values():
-                module.finishcycle()
+        queue = [SignalWrapper(Signal.LOW, modules['broadcaster'], button)]
+        while queue:
+            newq = []
+            for entry in queue:
+                if entry.signal == Signal.LOW:
+                    lowsignals += 1
+                elif entry.signal == Signal.HIGH:
+                    highsignals += 1
+                newpulses = entry.target.handlesignal(entry.signal, entry.source)
+                if newpulses:
+                    newq.extend(newpulses)
 
+            queue = newq
     for _ in range(1000):
         pushbutton()
 
@@ -202,7 +171,36 @@ def part1(lines):
 
 
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    modules = parsemodules(lines)
+    button = DummyModule('button')
+    logger.info(f"Parsed {len(modules)} modules")
+    lowsignals = 0
+    highsignals = 0
+    numpresses = 0
+    assert 'rx' in modules
+
+    def pushbutton():
+        nonlocal lowsignals, highsignals
+        queue = [SignalWrapper(Signal.LOW, modules['broadcaster'], button)]
+        while queue:
+            newq = []
+            for entry in queue:
+                if entry.signal == Signal.LOW:
+                    lowsignals += 1
+                    if entry.target.name == 'rx':
+                        return numpresses
+                elif entry.signal == Signal.HIGH:
+                    highsignals += 1
+                newpulses = entry.target.handlesignal(entry.signal, entry.source)
+                if newpulses:
+                    newq.extend(newpulses)
+
+            queue = newq
+    while True:
+        numpresses += 1
+        pushbutton()
+
+    assert False
 
 
 def main():
