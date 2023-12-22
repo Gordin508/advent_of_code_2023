@@ -127,7 +127,7 @@ class Brick:
         return Brick(start, end)
 
 
-def part1(lines):
+def parsebricks_and_settle(lines):
     bricks = list(sorted((Brick.from_line(line) for line in lines), reverse=False))
     logger.info(f"Parsed {len(bricks)} bricks")
 
@@ -149,24 +149,107 @@ def part1(lines):
             searchz -= 1
         lowest.moveZ(searchz + 1)
         settled[lowest.end.z].append(lowest)
+    return bricks, settled, supports, supportedby
 
-    #for zvalue, settledbricks in settled.items():
-    #    logger.debug(zvalue)
-    #    logger.debug("\n".join((str(brick) for brick in settledbricks)))
-    import ipdb; ipdb.set_trace()
+
+def collapse(bricks, settled, supports, supportedby, desintegratedbrick) -> int:
+    # how many bricks fall if brick is desintegrated
+    # supports and supportedby imply a directed graph
+
+    # check graph integrity for safety
+    for brick, supportedlist in supports.items():
+        for sbrick in supportedlist:
+            assert brick in supportedby[sbrick], f"{brick} supports {sbrick}, but is not in supportedby."
+
+    if not supports[desintegratedbrick]:
+        # the removed brick does not support anything
+        return 0
+    elif all(len(supportedby[sbrick]) > 1 for sbrick in supports[desintegratedbrick]):
+        # ever sbrick supported by brick is also supported by at least one other brick
+        return 0
+
+    def collapse(brick):
+        # remove brick from the graph
+        for supportedbrick in supports[brick]:
+            supportedby[supportedbrick].remove(brick)
+        del supports[brick]
+        if brick in supportedby:
+            del supportedby[brick]
+
+    collapse(desintegratedbrick)
+    result = 0
+    desintegrated = True
+    fallingbricks = []
+    while desintegrated:
+        # while at least one brick has been removed in the previous step,
+        # check if other bricks are removed as a result
+        desintegrated = False
+        for brick, supportbricks in supportedby.items():
+            if brick.start.z > 1 and len(supportbricks) == 0:
+                # brick is neither supported by ground nor by any remaining brick
+                # we remember this brick for now, as we can not manipulate supportedby
+                # while iterating over it
+                fallingbricks.append(brick)
+                desintegrated = True
+
+        for brick in fallingbricks:
+            # remove all unsupported bricks from the graph
+            collapse(brick)
+        result += len(fallingbricks)
+        fallingbricks.clear()
+
+    return result
+
+
+part2result = None
+
+
+def part1(lines):
+    global part2result
+    bricks, settled, osupports, osupportedby = parsebricks_and_settle(lines)
 
     result = 0
+    part2result = 0
     for brick in bricks:
-        if not supports[brick]:
+        # we copy the support lists as we need to manipulate inside the collapse function
+        supports = defaultdict(list)
+        for key, value in osupports.items():
+            supports[key] = value.copy()
+        supportedby = defaultdict(list)
+        for key, value in osupportedby.items():
+            supportedby[key] = value.copy()
+        falling = collapse(bricks, settled, supports, supportedby, brick)
+
+        # falling is the number of bricks which have fallen as a result
+        # of removing the brick
+        if falling == 0:
+            # this means we can safely desintegrate this brick
             result += 1
-        elif all(len(supportedby[sbrick]) > 1 for sbrick in supports[brick]):
-            # ever sbrick supported by brick is also supported by another brick
-            result += 1
+        else:
+            # the number of falling bricks is relevant to part2
+            part2result += falling
     return result
 
 
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    global part2result
+    if part2result is not None:
+        # calculated by part1 already
+        return part2result
+
+    bricks, settled, osupports, osupportedby = parsebricks_and_settle(lines)
+
+    result = 0
+    for brick in bricks:
+        # we copy the support lists as we need to manipulate them now
+        supports = defaultdict(list)
+        for key, value in osupports.items():
+            supports[key] = value.copy()
+        supportedby = defaultdict(list)
+        for key, value in osupportedby.items():
+            supportedby[key] = value.copy()
+        result += collapse(bricks, settled, supports, supportedby, brick)
+    return result
 
 
 def main():
