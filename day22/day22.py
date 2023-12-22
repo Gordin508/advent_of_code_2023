@@ -170,33 +170,36 @@ def collapse(bricks, settled, supports, supportedby, desintegratedbrick) -> int:
 
     def collapse(brick):
         # remove brick from the graph
+        affected = set()
         for supportedbrick in supports[brick]:
             supportedby[supportedbrick].remove(brick)
+            affected.add(supportedbrick)
         del supports[brick]
         if brick in supportedby:
             del supportedby[brick]
+        return affected
 
-    collapse(desintegratedbrick)
+    affected = collapse(desintegratedbrick)
     result = 0
-    desintegrated = True
-    fallingbricks = []
-    while desintegrated:
+
+    while affected:
         # while at least one brick has been removed in the previous step,
         # check if other bricks are removed as a result
-        desintegrated = False
-        for brick, supportbricks in supportedby.items():
+        falling = []
+        newaffected = set()
+        for brick in affected:
+            supportbricks = supportedby[brick]
             if brick.start.z > 1 and len(supportbricks) == 0:
                 # brick is neither supported by ground nor by any remaining brick
                 # we remember this brick for now, as we can not manipulate supportedby
                 # while iterating over it
-                fallingbricks.append(brick)
-                desintegrated = True
+                falling.append(brick)
 
-        for brick in fallingbricks:
+        for brick in falling:
             # remove all unsupported bricks from the graph
-            collapse(brick)
-        result += len(fallingbricks)
-        fallingbricks.clear()
+            newaffected.update(collapse(brick))
+        result += len(falling)
+        affected = newaffected
 
     return result
 
