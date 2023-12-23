@@ -215,31 +215,27 @@ class HikingMap:
         from collections import defaultdict
         # we always store distance + 1 so we can abuse this as visited map also
         visited = defaultdict(bool)
-        nodecounts = defaultdict(int)
 
-        # DFS
+        # DFS over queue entries (node, depth, backtrack)
+        # we need these backtrack booleans since this is iterative rather than recursive
         stack = [(self.nodes[self.start], 0, False)]
-        nodecounts[stack[0][0]] += 1
-        time = 0
         maxpathlen = 0
 
         while stack:
-            time += 1
             node, d, backtrack = stack.pop()
-            nodecounts[node] -= 1
             if not backtrack and not visited[node]:
                 visited[node] = True
                 stack.append((node, d, True))  # for backtracking
                 # add all edges
                 if (node.y, node.x) == self.dest:
                     if d > maxpathlen:
-                        logger.info(f"New max: {d}")
+                        logger.debug(f"New max: {d}")
                         maxpathlen = d
+                        # write out max distances
                     continue
                 for neighbor, distance in node.getNeighbors():
                     if not visited[neighbor]:
                         stack.append((neighbor, d + distance, False))
-                        nodecounts[node] += 1
 
             elif backtrack:
                 # backtrack
