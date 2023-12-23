@@ -56,39 +56,43 @@ class TileType(Enum):
 
 class Node:
     def __init__(self, y, x):
-        self.neighbors = set()
+        self.neighbors = {}
         self.y = y
         self.x = x
 
-    def addNeighbor(self, node):
+    def addNeighbor(self, node, distance=None):
         if node is None:
             return
         if node in self.neighbors:
             return
-        self.neighbors.add(node)
-        node.neighbors.add(self)
+        if not distance:
+            distance = self.distance(node)
+        self.neighbors[node] = distance
+        node.neighbors[self] = distance
 
     def getNeighbors(self):
-        return self.neighbors
+        return self.neighbors.items()
 
     def removeNeighbor(self, node):
         if node not in self.neighbors:
             return
-        self.neighbors.remove(node)
-        node.neighbors.remove(self)
+        del self.neighbors[node]
+        del node.neighbors[self]
 
     def dissolve(self):
         assert self.iscorridor()
-        n1, n2 = list(self.neighbors)
-        n1.removeNeighbor(self)
-        n2.removeNeighbor(self)
-        n1.addNeighbor(n2)
+        n1, n2 = list(self.neighbors.items())
+        # n[0] is the node object, n[1] is the distance
+        n1[0].addNeighbor(n2[0], n1[1] + n2[1])
+        n1[0].removeNeighbor(self)
+        n2[0].removeNeighbor(self)
 
     def numNeighbors(self):
         return len(self.neighbors)
 
     def distance(self, other):
-        assert self.y == other.y or self.x == other.x
+        if other in self.neighbors:
+            return self.neighbors[other]
         return abs(self.y - other.y) + abs(self.x - other.x)
 
     def __eq__(self, other):
@@ -99,13 +103,10 @@ class Node:
         return hash((self.y, self.x))
 
     def iscorridor(self):
-        if len(self.neighbors) != 2:
-            return False
-        n1, n2 = list(self.neighbors)
-        return n1.x == n2.x or n1.y == n2.y
+        return len(self.neighbors) == 2
 
     def __str__(self):
-        neighbors = ", ".join(f"{n.y} {n.x}" for n in self.neighbors)
+        neighbors = ", ".join(f"{n.y} {n.x} (dist={n.distance(self)})" for n in self.neighbors)
         return f"Node {self.y} {self.x} ({neighbors})"
 
     def __repr__(self):
@@ -123,7 +124,6 @@ class HikingMap:
         self.distances = None
         self.start = next(((0, x) for x in range(self.width) if self.grid[0, x] == TileType.PATH))
         self.dest = next(((self.height - 1, x) for x in range(self.width) if self.grid[self.height - 1, x] == TileType.PATH))
-        self._buildCompressedGraph()
 
     def _buildCompressedGraph(self):
         from itertools import product
@@ -135,10 +135,11 @@ class HikingMap:
                 node.addNeighbor(self.nodes.get((ny, nx), None))
 
         # zap unneeded nodes
-        reduced = False
+        reduced = True
         zapped = []
         while reduced:
-            for node in self.nodes:
+            reduced = False
+            for node in self.nodes.values():
                 if node.iscorridor():
                     node.dissolve()
                     reduced = True
@@ -146,12 +147,10 @@ class HikingMap:
             while zapped:
                 node = zapped.pop()
                 del self.nodes[node]
+        self.nodes = {(node.y, node.x): node for node in self.nodes.values() if node.numNeighbors() > 0}
         return
 
     def part1(self):
-        if self.distances is not None:
-            return
-
         # we always store distance + 1 so we can abuse this as visited map also
         visited = np.zeros(self.grid.shape, dtype=np.int8)
         start_time = np.zeros(self.grid.shape, dtype=np.uint32)
@@ -211,14 +210,47 @@ class HikingMap:
     def calculateLongestDistances(self, part2=False):
         if not part2:
             return self.part1()
-        return 0
+        self._buildCompressedGraph()
+
+        from collections import defaultdict
+        # we always store distance + 1 so we can abuse this as visited map also
+        visited = defaultdict(bool)
+        nodecounts = defaultdict(int)
+
+        # DFS
+        stack = [(self.nodes[self.start], 0, False)]
+        nodecounts[stack[0][0]] += 1
+        time = 0
+        maxpathlen = 0
+
+        while stack:
+            time += 1
+            node, d, backtrack = stack.pop()
+            nodecounts[node] -= 1
+            if not backtrack and not visited[node]:
+                visited[node] = True
+                stack.append((node, d, True))  # for backtracking
+                # add all edges
+                if (node.y, node.x) == self.dest:
+                    if d > maxpathlen:
+                        logger.info(f"New max: {d}")
+                        maxpathlen = d
+                    continue
+                for neighbor, distance in node.getNeighbors():
+                    if not visited[neighbor]:
+                        stack.append((neighbor, d + distance, False))
+                        nodecounts[node] += 1
+
+            elif backtrack:
+                # backtrack
+                visited[node] = False
+        return maxpathlen
 
     def __str__(self):
         return '\n'.join(''.join(str(x) for x in row) for row in self.grid)
 
 
 def part1(lines):
-    import ipdb; ipdb.set_trace()
     hikingmap = HikingMap(lines)
     return hikingmap.calculateLongestDistances()
 
