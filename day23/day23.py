@@ -63,11 +63,26 @@ class Node:
     def addNeighbor(self, node):
         if node is None:
             return
+        if node in self.neighbors:
+            return
         self.neighbors.add(node)
         node.neighbors.add(self)
 
     def getNeighbors(self):
         return self.neighbors
+
+    def removeNeighbor(self, node):
+        if node not in self.neighbors:
+            return
+        self.neighbors.remove(node)
+        node.neighbors.remove(self)
+
+    def dissolve(self):
+        assert self.iscorridor()
+        n1, n2 = list(self.neighbors)
+        n1.removeNeighbor(self)
+        n2.removeNeighbor(self)
+        n1.addNeighbor(n2)
 
     def numNeighbors(self):
         return len(self.neighbors)
@@ -83,6 +98,19 @@ class Node:
         # only hash y and x coordinate
         return hash((self.y, self.x))
 
+    def iscorridor(self):
+        if len(self.neighbors) != 2:
+            return False
+        n1, n2 = list(self.neighbors)
+        return n1.x == n2.x or n1.y == n2.y
+
+    def __str__(self):
+        neighbors = ", ".join(f"{n.y} {n.x}" for n in self.neighbors)
+        return f"Node {self.y} {self.x} ({neighbors})"
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class HikingMap:
     def __init__(self, lines):
@@ -95,20 +123,32 @@ class HikingMap:
         self.distances = None
         self.start = next(((0, x) for x in range(self.width) if self.grid[0, x] == TileType.PATH))
         self.dest = next(((self.height - 1, x) for x in range(self.width) if self.grid[self.height - 1, x] == TileType.PATH))
+        self._buildCompressedGraph()
 
     def _buildCompressedGraph(self):
         from itertools import product
         self.nodes = {(y, x): Node(y, x) for (y, x) in product(range(self.height), range(self.width)) if self.grid[y,x] != TileType.FOREST}
-        for node in self.nodes:
+        for node in self.nodes.values():
             y = node.y
             x = node.x
-            for coord in [(y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)]:
-                node.addNeighbor(self.nodes.get((y, x)), None)
+            for ny, nx in [(y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)]:
+                node.addNeighbor(self.nodes.get((ny, nx), None))
 
         # zap unneeded nodes
-        pass
+        reduced = False
+        zapped = []
+        while reduced:
+            for node in self.nodes:
+                if node.iscorridor():
+                    node.dissolve()
+                    reduced = True
+                    zapped.append((node.y, node.x))
+            while zapped:
+                node = zapped.pop()
+                del self.nodes[node]
+        return
 
-    def calculateLongestDistances(self, part2=False):
+    def part1(self):
         if self.distances is not None:
             return
 
@@ -118,18 +158,17 @@ class HikingMap:
         end_time = np.zeros(self.grid.shape, dtype=np.uint32)
 
         def neighbors(y, x):
-            if not part2:
-                ttype = self.grid[y, x]
-                if ttype == TileType.DOWNSLOPE and y < self.height - 1:
-                    yield ((y + 1, x))
-                if ttype == TileType.UPSLOPE and y > 0:
-                    yield ((y - 1, x))
-                if ttype == TileType.LEFTSLOPE and x > 0:
-                    yield ((y, x - 1))
-                if ttype == TileType.RIGHTSLOPE and x < self.width - 1:
-                    yield ((y, x + 1))
-                if ttype != TileType.PATH:
-                    return
+            ttype = self.grid[y, x]
+            if ttype == TileType.DOWNSLOPE and y < self.height - 1:
+                yield ((y + 1, x))
+            if ttype == TileType.UPSLOPE and y > 0:
+                yield ((y - 1, x))
+            if ttype == TileType.LEFTSLOPE and x > 0:
+                yield ((y, x - 1))
+            if ttype == TileType.RIGHTSLOPE and x < self.width - 1:
+                yield ((y, x + 1))
+            if ttype != TileType.PATH:
+                return
 
             if y > 0:
                 yield ((y - 1, x))
@@ -168,6 +207,11 @@ class HikingMap:
                 end_time[y, x] = time
                 visited[y, x] = 0
         return maxpathlen
+
+    def calculateLongestDistances(self, part2=False):
+        if not part2:
+            return self.part1()
+        return 0
 
     def __str__(self):
         return '\n'.join(''.join(str(x) for x in row) for row in self.grid)
