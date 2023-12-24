@@ -1,6 +1,6 @@
 import logging
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -24,9 +24,15 @@ class HailStone:
         hailstone_identifier += 1
 
         a = -self.x / self.vx
+
+        # for calculating y position
+        # equation is self.y = self.a * x + self.b
         self.b = self.y + a * self.vy
         self.a = self.vy / self.vx
-        # equation is self.y = self.a * x + self.b
+
+        # same for z position
+        self.bz = self.z + a * self.vz
+        self.za = self.vz / self.vx
 
     @classmethod
     def from_line(cls, line):
@@ -40,7 +46,7 @@ class HailStone:
     def __repr__(self):
         return self.__str__()
 
-    def intersectXY(self, other):
+    def intersectXY(self, other, testpast=True):
         # give the position where the paths of self and other intersect
         # self.a * x + self.b == other.a * x + other.b
         # (self.a - other.a) * x == other.b - self.b
@@ -51,9 +57,13 @@ class HailStone:
         x = (other.b - self.b) / divisor
         y = self.a * x + self.b
         # we also need to check whether intersection has been in the past
-        if sign(x - self.x) != sign(self.vx) or sign(x - other.x) != sign(other.vx):
-            return None
+        if testpast:
+            if sign(x - self.x) != sign(self.vx) or sign(x - other.x) != sign(other.vx):
+                return None
         return (x, y)
+
+    def directionDot(self, other):
+        return self.vx * other.vx + self.vy * other.vy + self.vz * other.vz
 
     def __eq__(self, other):
         return self.identifier == other.identifier
@@ -90,7 +100,21 @@ def part1(lines):
 
 
 def part2(lines):
-    raise NotImplementedError("Part 2 not yet implemented")
+    import z3  # pip install z3-solver
+    stones = [HailStone.from_line(line) for line in lines]
+    x, y, z, vx, vy, vz = z3.Reals("x y z vx vy vz")
+    solver = z3.Solver()
+    # only 3 hailstones are needed here;  each creates 1 variable and 3 equations, for a total of 9 vars and 9 eqs
+    for i, stone in enumerate(stones[:3]):
+        ti = z3.Real(f"t{i}")
+        solver.add(ti > 0)
+        solver.add(x + ti * vx == stone.x + ti * stone.vx)
+        solver.add(y + ti * vy == stone.y + ti * stone.vy)
+        solver.add(z + ti * vz == stone.z + ti * stone.vz)
+    solver.check()
+    solution = tuple(solver.model()[var].as_long() for var in [x, y, z])
+    logger.debug(f"Valid x y z: {solution}")
+    return sum(solution)
 
 
 def main():
